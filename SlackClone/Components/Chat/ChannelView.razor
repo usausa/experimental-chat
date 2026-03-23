@@ -1,0 +1,292 @@
+<div class="channel-view">
+    <div class="channel-header">
+        <div class="channel-header-left">
+            @if (Channel is not null)
+            {
+                @if (Channel.IsDirectMessage)
+                {
+                    <span class="channel-header-name">@Channel.Name</span>
+                }
+                else
+                {
+                    <span class="channel-header-name"># @Channel.Name</span>
+                }
+                @if (!string.IsNullOrEmpty(Channel.Description))
+                {
+                    <span class="channel-header-divider">|</span>
+                    <span class="channel-header-topic">@Channel.Description</span>
+                }
+            }
+        </div>
+        <div class="channel-header-right">
+            @{
+                var pinnedCount = ChannelId is not null ? ChatService.GetPinnedMessages(ChannelId).Count : 0;
+            }
+            @if (pinnedCount > 0)
+            {
+                <button class="header-icon-btn" title="Pinned messages" @onclick="() => showPinnedPanel = !showPinnedPanel">
+                    📌
+                    <span class="header-icon-label">@pinnedCount</span>
+                </button>
+            }
+            <button class="header-icon-btn" title="Members" @onclick="() => showMembersPanel = !showMembersPanel">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm0 1c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z" />
+                </svg>
+                <span class="header-icon-label">@allUsers.Count</span>
+            </button>
+            <button class="header-icon-btn" title="Search" @onclick="() => showSearchPanel = !showSearchPanel">
+                🔍
+            </button>
+        </div>
+    </div>
+
+    <div class="channel-body">
+        <div class="channel-main">
+            <div class="channel-messages" @ref="messagesContainer">
+                @if (Channel is not null)
+                {
+                    <div class="channel-intro">
+                        @if (Channel.IsDirectMessage)
+                        {
+                            var dmUser = ChatService.GetUser(Channel.DmUserId ?? "");
+                            if (dmUser is not null)
+                            {
+                                <UserAvatar User="@dmUser" Size="UserAvatar.AvatarSize.Large" ShowStatus="true" />
+                                <h2>@dmUser.DisplayName</h2>
+                                <p class="channel-intro-desc">This is the very beginning of your direct message history with <strong>@dmUser.DisplayName</strong>.</p>
+                            }
+                        }
+                        else
+                        {
+                            <div class="channel-intro-icon">#</div>
+                            <h2>@Channel.Name</h2>
+                            <p class="channel-intro-desc">
+                                @(Channel.Description ?? $"This is the very beginning of the #{Channel.Name} channel.")
+                            </p>
+                        }
+                    </div>
+                }
+
+                @{
+                    string? lastAuthorId = null;
+                    DateTimeOffset? lastTimestamp = null;
+                    DateTime? lastDate = null;
+                }
+                @foreach (var message in messages)
+                {
+                    @* Date divider *@
+                    if (lastDate is null || message.Timestamp.Date != lastDate.Value)
+                    {
+                        <div class="date-divider">
+                            <span class="date-divider-label">@FormatDateDivider(message.Timestamp)</span>
+                        </div>
+                        lastAuthorId = null;
+                        lastTimestamp = null;
+                    }
+                    lastDate = message.Timestamp.Date;
+
+                    var author = ChatService.GetUser(message.AuthorId);
+                    if (author is null) continue;
+
+                    var isNewGroup = lastAuthorId != message.AuthorId
+                        || lastTimestamp is null
+                        || (message.Timestamp - lastTimestamp.Value).TotalMinutes > 5;
+
+                    <MessageItem Message="@message"
+                                 Author="@author"
+                                 IsFirstInGroup="@isNewGroup"
+                                 CurrentUserId="@currentUser.Id"
+                                 IsBookmarked="@ChatService.IsBookmarked(message.Id)"
+                                 OnReactionClick="@(emoji => HandleToggleReactionAsync(message.Id, emoji))"
+                                 OnThreadOpen="OpenThread"
+                                 OnEdit="HandleEditAsync"
+                                 OnDelete="HandleDeleteAsync"
+                                 OnProfileOpen="OpenProfile"
+                                 OnBookmark="HandleBookmarkAsync"
+                                 OnPin="HandlePinAsync" />
+
+                    lastAuthorId = message.AuthorId;
+                    lastTimestamp = message.Timestamp;
+                }
+            </div>
+
+            @if (typingUser is not null)
+            {
+                <div class="typing-indicator">
+                    <span class="typing-dots"><span></span><span></span><span></span></span>
+                    <span>@typingUser is typing...</span>
+                </div>
+            }
+            else
+            {
+                <div class="typing-indicator-empty"></div>
+            }
+
+            <MessageInput Placeholder="@InputPlaceholder" OnSend="HandleSendAsync" />
+        </div>
+
+        @* Thread side panel *@
+        @if (activeThreadId is not null && threadParent is not null)
+        {
+            <div class="thread-panel">
+                <div class="thread-panel-header">
+                    <span class="thread-panel-title">Thread</span>
+                    <button class="thread-panel-close" @onclick="CloseThread">✕</button>
+                </div>
+                <div class="thread-panel-messages">
+                    @{
+                        var threadAuthor = ChatService.GetUser(threadParent.AuthorId);
+                    }
+                    @if (threadAuthor is not null)
+                    {
+                        <div class="thread-parent-msg">
+                            <UserAvatar User="@threadAuthor" />
+                            <div>
+                                <div class="message-header">
+                                    <span class="message-author">@threadAuthor.DisplayName</span>
+                                    <span class="message-timestamp">@FormatTimestamp(threadParent.Timestamp)</span>
+                                </div>
+                                <div class="message-text">@((MarkupString)Helpers.MessageFormatter.ToHtml(threadParent.Content))</div>
+                            </div>
+                        </div>
+                    }
+                    <div class="thread-reply-divider">@threadReplies.Count @(threadReplies.Count == 1 ? "reply" : "replies")</div>
+                    @foreach (var reply in threadReplies)
+                    {
+                        var replyAuthor = ChatService.GetUser(reply.AuthorId);
+                        if (replyAuthor is null) continue;
+                        <div class="thread-reply-item">
+                            <UserAvatar User="@replyAuthor" />
+                            <div>
+                                <div class="message-header">
+                                    <span class="message-author">@replyAuthor.DisplayName</span>
+                                    <span class="message-timestamp">@FormatTimestamp(reply.Timestamp)</span>
+                                </div>
+                                <div class="message-text">@((MarkupString)Helpers.MessageFormatter.ToHtml(reply.Content))</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <MessageInput Placeholder="Reply..." OnSend="HandleThreadReplyAsync" />
+            </div>
+        }
+
+        @* Members side panel *@
+        @if (showMembersPanel)
+        {
+            <div class="members-panel">
+                <div class="members-panel-header">
+                    <span class="members-panel-title">Members</span>
+                    <button class="thread-panel-close" @onclick="() => showMembersPanel = false">✕</button>
+                </div>
+                <div class="members-panel-list">
+                    @foreach (var user in allUsers)
+                    {
+                        <div class="member-row" @onclick="() => OpenProfile(user.Id)">
+                            <UserAvatar User="@user" Size="UserAvatar.AvatarSize.Small" ShowStatus="true" />
+                            <span class="member-name">@user.DisplayName</span>
+                            @if (user.CustomStatusEmoji is not null)
+                            {
+                                <span class="member-status-emoji" title="@user.CustomStatusText">@user.CustomStatusEmoji</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Search side panel *@
+        @if (showSearchPanel)
+        {
+            <div class="members-panel">
+                <div class="members-panel-header">
+                    <span class="members-panel-title">Search messages</span>
+                    <button class="thread-panel-close" @onclick="() => { showSearchPanel = false; searchResults = []; }">✕</button>
+                </div>
+                <div class="search-input-row">
+                    <input type="text" class="search-input" placeholder="Search..." @bind="searchQuery" @bind:event="oninput" @onkeydown="HandleSearchKeyDownAsync" />
+                    <button class="search-go-btn" @onclick="DoSearchAsync">Go</button>
+                </div>
+                <div class="members-panel-list">
+                    @foreach (var msg in searchResults)
+                    {
+                        var msgAuthor = ChatService.GetUser(msg.AuthorId);
+                        <div class="search-result-item">
+                            <span class="search-result-channel">@(ChatService.GetChannel(msg.ChannelId)?.Name ?? "")</span>
+                            <div class="search-result-body">
+                                @if (msgAuthor is not null)
+                                {
+                                    <strong>@msgAuthor.DisplayName</strong>
+                                }
+                                <span>@msg.Content</span>
+                            </div>
+                        </div>
+                    }
+                    @if (searchResults.Count == 0 && !string.IsNullOrWhiteSpace(searchQuery))
+                    {
+                        <p class="search-no-results">No results found.</p>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Pinned messages side panel *@
+        @if (showPinnedPanel && ChannelId is not null)
+        {
+            <div class="members-panel">
+                <div class="members-panel-header">
+                    <span class="members-panel-title">Pinned messages</span>
+                    <button class="thread-panel-close" @onclick="() => showPinnedPanel = false">✕</button>
+                </div>
+                <div class="members-panel-list">
+                    @foreach (var msg in ChatService.GetPinnedMessages(ChannelId))
+                    {
+                        var pinAuthor = ChatService.GetUser(msg.AuthorId);
+                        <div class="pinned-message-item">
+                            <div class="pinned-msg-header">
+                                @if (pinAuthor is not null)
+                                {
+                                    <UserAvatar User="@pinAuthor" Size="UserAvatar.AvatarSize.Small" />
+                                    <strong>@pinAuthor.DisplayName</strong>
+                                }
+                                <span class="message-timestamp">@FormatTimestamp(msg.Timestamp)</span>
+                            </div>
+                            <div class="pinned-msg-content">@msg.Content</div>
+                        </div>
+                    }
+                    @if (ChatService.GetPinnedMessages(ChannelId).Count == 0)
+                    {
+                        <p class="search-no-results">No pinned messages yet.</p>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @* User profile card *@
+    @if (profileUser is not null)
+    {
+        <div class="profile-card-backdrop" @onclick="() => profileUser = null"></div>
+        <div class="profile-card">
+            <div class="profile-card-banner" style="background-color: @profileUser.AvatarColor;"></div>
+            <div class="profile-card-avatar">
+                <UserAvatar User="@profileUser" Size="UserAvatar.AvatarSize.Large" ShowStatus="true" />
+            </div>
+            <div class="profile-card-body">
+                <h3>@profileUser.DisplayName</h3>
+                @if (profileUser.CustomStatusEmoji is not null || profileUser.CustomStatusText is not null)
+                {
+                    <p class="profile-card-status">@profileUser.CustomStatusEmoji @profileUser.CustomStatusText</p>
+                }
+                <div class="profile-card-info">
+                    <div class="profile-card-row">
+                        <span class="profile-card-label">Status</span>
+                        <span class="profile-card-value">@profileUser.Status</span>
+                    </div>
+                </div>
+                <button class="profile-card-dm-btn" @onclick="() => profileUser = null">Message</button>
+            </div>
+        </div>
+    }
+</div>

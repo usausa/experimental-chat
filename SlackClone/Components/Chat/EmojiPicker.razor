@@ -1,0 +1,42 @@
+<div class="emoji-picker-backdrop" @onclick="CloseAsync"></div>
+<div class="emoji-picker">
+    <div class="emoji-picker-search">
+        <input type="text" placeholder="Search emoji..." @bind="search" @bind:event="oninput" />
+    </div>
+    <div class="emoji-picker-header">
+        @foreach (var cat in Categories)
+        {
+            <button class="emoji-cat-btn @(cat.Name == activeCategory ? "emoji-cat-active" : "")"
+                    @onclick="() => activeCategory = cat.Name"
+                    @onclick:stopPropagation="true"
+                    title="@cat.Name">
+                @cat.Icon
+            </button>
+        }
+    </div>
+    <div class="emoji-picker-body">
+        @if (string.IsNullOrWhiteSpace(search))
+        {
+            @foreach (var cat in Categories.Where(c => c.Name == activeCategory))
+            {
+                <div class="emoji-cat-label">@cat.Name</div>
+                <div class="emoji-grid">
+                    @foreach (var emoji in cat.Emojis)
+                    {
+                        <button class="emoji-cell" @onclick="() => SelectAsync(emoji)" @onclick:stopPropagation="true" title="@emoji">@emoji</button>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="emoji-cat-label">Search results</div>
+            <div class="emoji-grid">
+                @foreach (var emoji in Categories.SelectMany(c => c.Emojis).Distinct().Where(e => e.Contains(search)))
+                {
+                    <button class="emoji-cell" @onclick="() => SelectAsync(emoji)" @onclick:stopPropagation="true" title="@emoji">@emoji</button>
+                }
+            </div>
+        }
+    </div>
+</div>

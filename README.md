@@ -1,1 +1,3 @@
-# experimental-chat
+# Experimental Project
+
+AI-generated Slack like UI sample.

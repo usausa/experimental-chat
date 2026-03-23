@@ -1,0 +1,7 @@
+<div class="user-avatar @SizeClass" style="background-color: @User.AvatarColor;" title="@User.DisplayName">
+    <span class="avatar-initial">@User.DisplayName[..1]</span>
+    @if (ShowStatus)
+    {
+        <span class="status-indicator @StatusClass"></span>
+    }
+</div>

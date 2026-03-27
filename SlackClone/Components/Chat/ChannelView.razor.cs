@@ -25,7 +25,9 @@ public sealed partial class ChannelView : IDisposable
     private IReadOnlyList<ChatUser> allUsers = [];
     private ChatUser currentUser = default!;
     // ReSharper disable once NotAccessedField.Local
+#pragma warning disable IDE0052
     private ElementReference messagesContainer;
+#pragma warning restore IDE0052
 
     // Thread
     private string? activeThreadId;

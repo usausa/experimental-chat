@@ -17,7 +17,9 @@ public partial class MessageInput
 
     private string MessageText { get; set; } = string.Empty;
     // ReSharper disable once NotAccessedField.Local
+#pragma warning disable IDE0052
     private ElementReference inputRef;
+#pragma warning restore IDE0052
     private bool showEmojiPicker;
     private bool showAttachDialog;
 

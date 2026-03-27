@@ -390,12 +390,8 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(emoji);
 
         var message = FindMessage(messageId);
-        if (message is null)
-        {
-            return;
-        }
 
-        var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
+        var existing = message?.Reactions.FirstOrDefault(r => r.Emoji == emoji);
         if (existing is null)
         {
             return;
@@ -404,7 +400,7 @@ public sealed class ChatService : IChatService
         existing.UserIds.Remove(currentUser.Id);
         if (existing.UserIds.Count == 0)
         {
-            message.Reactions.Remove(existing);
+            message?.Reactions.Remove(existing);
         }
     }
 
@@ -510,10 +506,7 @@ public sealed class ChatService : IChatService
         channelMessages.Add(reply);
 
         var parent = FindMessage(parentMessageId);
-        if (parent is not null)
-        {
-            parent.ReplyCount = GetThreadReplies(parentMessageId).Count;
-        }
+        parent?.ReplyCount = GetThreadReplies(parentMessageId).Count;
 
         return reply;
     }
@@ -561,20 +554,14 @@ public sealed class ChatService : IChatService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         var msg = FindMessage(messageId);
-        if (msg is not null)
-        {
-            msg.IsPinned = true;
-        }
+        msg?.IsPinned = true;
     }
 
     public void UnpinMessage(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         var msg = FindMessage(messageId);
-        if (msg is not null)
-        {
-            msg.IsPinned = false;
-        }
+        msg?.IsPinned = false;
     }
 
     public IReadOnlyList<ChatMessage> GetPinnedMessages(string channelId) =>
@@ -617,12 +604,9 @@ public sealed class ChatService : IChatService
         channelMessages.Add(reply);
 
         var parent = FindMessage(parentId);
-        if (parent is not null)
-        {
-            parent.ReplyCount = messages.Values
-                .SelectMany(m => m)
-                .Count(m => m.ParentMessageId == parentId);
-        }
+        parent?.ReplyCount = messages.Values
+            .SelectMany(m => m)
+            .Count(m => m.ParentMessageId == parentId);
     }
 
     private static ChatMessage Msg(

@@ -10,6 +10,9 @@ public partial class Sidebar
     [Inject]
     private IChatService ChatService { get; set; } = default!;
 
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
     [Parameter]
     public string? SelectedChannelId { get; set; }
 
@@ -19,6 +22,7 @@ public partial class Sidebar
     private IReadOnlyList<Channel> channels = [];
     private IReadOnlyList<Channel> directMessages = [];
     private ChatUser currentUser = default!;
+    private IReadOnlyList<ChatUser> allUsers = [];
     private bool channelsExpanded = true;
     private bool dmsExpanded = true;
     private string filterText = string.Empty;
@@ -47,6 +51,18 @@ public partial class Sidebar
         channels = ChatService.GetChannels();
         directMessages = ChatService.GetDirectMessages();
         currentUser = ChatService.GetCurrentUser();
+        allUsers = ChatService.GetAllUsers();
+    }
+
+    private void SwitchUser(string userId)
+    {
+        if (!ChatService.SetCurrentUser(userId))
+        {
+            return;
+        }
+
+        showStatusDialog = false;
+        Navigation.Refresh();
     }
 
     private Task SelectChannel(string channelId)

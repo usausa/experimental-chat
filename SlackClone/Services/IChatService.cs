@@ -13,6 +13,7 @@ public interface IChatService
     Channel? GetChannel(string channelId);
     ChatUser? GetUser(string userId);
     ChatUser GetCurrentUser();
+    bool SetCurrentUser(string userId);
     IReadOnlyList<ChatUser> GetAllUsers();
     ChatMessage SendMessage(string channelId, string content);
     void AddReaction(string messageId, string emoji);

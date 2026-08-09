@@ -260,6 +260,15 @@
             <div class="status-custom-row">
                 <input type="text" class="modal-input" placeholder="What's your status?" @bind="statusText" />
             </div>
+            <div class="status-custom-row">
+                <span>Switch user</span>
+            </div>
+            <div class="status-preset-list">
+                @foreach (var user in allUsers)
+                {
+                    <button class="status-preset" disabled="@(user.Id == currentUser.Id)" @onclick="() => SwitchUser(user.Id)">@user.DisplayName</button>
+                }
+            </div>
         </div>
         <div class="modal-dialog-footer">
             <button class="edit-cancel-btn" @onclick="ClearStatus">Clear status</button>

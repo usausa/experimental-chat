@@ -13,6 +13,9 @@ public sealed class ChatService : IChatService
     private readonly Dictionary<string, List<ChatMessage>> messages;
     private readonly Dictionary<string, DateTimeOffset> lastRead;
     private readonly HashSet<string> bookmarks = [];
+
+    private readonly Lock sync = new();
+
     private ChatUser currentUser;
 
     public ChatService()
@@ -314,49 +317,105 @@ public sealed class ChatService : IChatService
         };
     }
 
-    public IReadOnlyList<Channel> GetChannels() =>
-        channels.Where(c => !c.IsDirectMessage).ToList();
+    public IReadOnlyList<Channel> GetChannels()
+    {
+        lock (sync)
+        {
+            return channels.Where(c => !c.IsDirectMessage).ToList();
+        }
+    }
 
-    public IReadOnlyList<Channel> GetDirectMessages() =>
-        channels.Where(c => c.IsDirectMessage).ToList();
+    public IReadOnlyList<Channel> GetDirectMessages()
+    {
+        lock (sync)
+        {
+            return channels.Where(c => c.IsDirectMessage).ToList();
+        }
+    }
 
-    public IReadOnlyList<ChatMessage> GetMessages(string channelId) =>
-        messages.TryGetValue(channelId, out var channelMessages)
-            ? channelMessages.Where(m => m.ParentMessageId is null && !m.IsDeleted).ToList()
-            : [];
+    public IReadOnlyList<ChatMessage> GetMessages(string channelId)
+    {
+        lock (sync)
+        {
+            return messages.TryGetValue(channelId, out var channelMessages)
+                ? channelMessages.Where(m => m.ParentMessageId is null && !m.IsDeleted).ToList()
+                : [];
+        }
+    }
 
-    public Channel? GetChannel(string channelId) =>
-        channels.FirstOrDefault(c => c.Id == channelId);
+    public Channel? GetChannel(string channelId)
+    {
+        lock (sync)
+        {
+            return channels.FirstOrDefault(c => c.Id == channelId);
+        }
+    }
 
-    public ChatUser? GetUser(string userId) =>
-        users.GetValueOrDefault(userId);
+    public ChatUser? GetUser(string userId)
+    {
+        lock (sync)
+        {
+            return users.GetValueOrDefault(userId);
+        }
+    }
 
-    public ChatUser GetCurrentUser() => currentUser;
+    public ChatUser GetCurrentUser()
+    {
+        lock (sync)
+        {
+            return currentUser;
+        }
+    }
 
-    public IReadOnlyList<ChatUser> GetAllUsers() => [.. users.Values];
+    public bool SetCurrentUser(string userId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+
+        lock (sync)
+        {
+            if (!users.TryGetValue(userId, out var user))
+            {
+                return false;
+            }
+
+            currentUser = user;
+            return true;
+        }
+    }
+
+    public IReadOnlyList<ChatUser> GetAllUsers()
+    {
+        lock (sync)
+        {
+            return [.. users.Values];
+        }
+    }
 
     public ChatMessage SendMessage(string channelId, string content)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channelId);
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
 
-        var message = new ChatMessage
+        lock (sync)
         {
-            Id = $"m{DateTimeOffset.UtcNow.Ticks}",
-            ChannelId = channelId,
-            AuthorId = currentUser.Id,
-            Content = content,
-            Timestamp = DateTimeOffset.Now
-        };
+            var message = new ChatMessage
+            {
+                Id = $"m{DateTimeOffset.UtcNow.Ticks}",
+                ChannelId = channelId,
+                AuthorId = currentUser.Id,
+                Content = content,
+                Timestamp = DateTimeOffset.Now
+            };
 
-        if (!messages.TryGetValue(channelId, out var channelMessages))
-        {
-            channelMessages = [];
-            messages[channelId] = channelMessages;
+            if (!messages.TryGetValue(channelId, out var channelMessages))
+            {
+                channelMessages = [];
+                messages[channelId] = channelMessages;
+            }
+
+            channelMessages.Add(message);
+            return message;
         }
-
-        channelMessages.Add(message);
-        return message;
     }
 
     public void AddReaction(string messageId, string emoji)
@@ -364,23 +423,26 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(emoji);
 
-        var message = FindMessage(messageId);
-        if (message is null)
+        lock (sync)
         {
-            return;
-        }
-
-        var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
-        if (existing is not null)
-        {
-            if (!existing.UserIds.Contains(currentUser.Id))
+            var message = FindMessage(messageId);
+            if (message is null)
             {
-                existing.UserIds.Add(currentUser.Id);
+                return;
             }
-        }
-        else
-        {
-            message.Reactions.Add(new Reaction(emoji, [currentUser.Id]));
+
+            var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
+            if (existing is not null)
+            {
+                if (!existing.UserIds.Contains(currentUser.Id))
+                {
+                    existing.UserIds.Add(currentUser.Id);
+                }
+            }
+            else
+            {
+                message.Reactions.Add(new Reaction(emoji, [currentUser.Id]));
+            }
         }
     }
 
@@ -389,18 +451,21 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(emoji);
 
-        var message = FindMessage(messageId);
-
-        var existing = message?.Reactions.FirstOrDefault(r => r.Emoji == emoji);
-        if (existing is null)
+        lock (sync)
         {
-            return;
-        }
+            var message = FindMessage(messageId);
 
-        existing.UserIds.Remove(currentUser.Id);
-        if (existing.UserIds.Count == 0)
-        {
-            message?.Reactions.Remove(existing);
+            var existing = message?.Reactions.FirstOrDefault(r => r.Emoji == emoji);
+            if (existing is null)
+            {
+                return;
+            }
+
+            existing.UserIds.Remove(currentUser.Id);
+            if (existing.UserIds.Count == 0)
+            {
+                message?.Reactions.Remove(existing);
+            }
         }
     }
 
@@ -409,20 +474,23 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(emoji);
 
-        var message = FindMessage(messageId);
-        if (message is null)
+        lock (sync)
         {
-            return;
-        }
+            var message = FindMessage(messageId);
+            if (message is null)
+            {
+                return;
+            }
 
-        var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
-        if (existing is not null && existing.UserIds.Contains(currentUser.Id))
-        {
-            RemoveReaction(messageId, emoji);
-        }
-        else
-        {
-            AddReaction(messageId, emoji);
+            var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
+            if (existing is not null && existing.UserIds.Contains(currentUser.Id))
+            {
+                RemoveReaction(messageId, emoji);
+            }
+            else
+            {
+                AddReaction(messageId, emoji);
+            }
         }
     }
 
@@ -431,55 +499,72 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(newContent);
 
-        var message = FindMessage(messageId);
-        if (message is null || message.AuthorId != currentUser.Id)
+        lock (sync)
         {
-            return;
-        }
+            var message = FindMessage(messageId);
+            if (message is null || message.AuthorId != currentUser.Id)
+            {
+                return;
+            }
 
-        message.Content = newContent;
-        message.IsEdited = true;
+            message.Content = newContent;
+            message.IsEdited = true;
+        }
     }
 
     public void DeleteMessage(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
 
-        var message = FindMessage(messageId);
-        if (message is null || message.AuthorId != currentUser.Id)
+        lock (sync)
         {
-            return;
-        }
+            var message = FindMessage(messageId);
+            if (message is null || message.AuthorId != currentUser.Id)
+            {
+                return;
+            }
 
-        message.IsDeleted = true;
+            message.IsDeleted = true;
+        }
     }
 
     public int GetUnreadCount(string channelId)
     {
-        if (!messages.TryGetValue(channelId, out var channelMessages))
+        lock (sync)
         {
-            return 0;
-        }
+            if (!messages.TryGetValue(channelId, out var channelMessages))
+            {
+                return 0;
+            }
 
-        if (!lastRead.TryGetValue(channelId, out var channelLastRead))
-        {
-            return channelMessages.Count;
-        }
+            if (!lastRead.TryGetValue(channelId, out var channelLastRead))
+            {
+                return channelMessages.Count;
+            }
 
-        return channelMessages.Count(m => m.Timestamp > channelLastRead && m.AuthorId != currentUser.Id && !m.IsDeleted);
+            return channelMessages.Count(m => m.Timestamp > channelLastRead && m.AuthorId != currentUser.Id && !m.IsDeleted);
+        }
     }
 
     public void MarkAsRead(string channelId)
     {
-        lastRead[channelId] = DateTimeOffset.Now;
+        lock (sync)
+        {
+            lastRead[channelId] = DateTimeOffset.Now;
+        }
     }
 
-    public IReadOnlyList<ChatMessage> GetThreadReplies(string parentMessageId) =>
-        messages.Values
-            .SelectMany(m => m)
-            .Where(m => m.ParentMessageId == parentMessageId && !m.IsDeleted)
-            .OrderBy(m => m.Timestamp)
-            .ToList();
+    public IReadOnlyList<ChatMessage> GetThreadReplies(string parentMessageId)
+    {
+        lock (sync)
+        {
+            return messages.Values
+                .SelectMany(m => m)
+                .Where(m => m.ParentMessageId == parentMessageId && !m.IsDeleted)
+                .OrderBy(m => m.Timestamp)
+                .ToList();
+        }
+    }
 
     public ChatMessage SendThreadReply(string channelId, string parentMessageId, string content)
     {
@@ -487,28 +572,31 @@ public sealed class ChatService : IChatService
         ArgumentException.ThrowIfNullOrWhiteSpace(parentMessageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
 
-        var reply = new ChatMessage
+        lock (sync)
         {
-            Id = $"m{DateTimeOffset.UtcNow.Ticks}",
-            ChannelId = channelId,
-            AuthorId = currentUser.Id,
-            Content = content,
-            Timestamp = DateTimeOffset.Now,
-            ParentMessageId = parentMessageId
-        };
+            var reply = new ChatMessage
+            {
+                Id = $"m{DateTimeOffset.UtcNow.Ticks}",
+                ChannelId = channelId,
+                AuthorId = currentUser.Id,
+                Content = content,
+                Timestamp = DateTimeOffset.Now,
+                ParentMessageId = parentMessageId
+            };
 
-        if (!messages.TryGetValue(channelId, out var channelMessages))
-        {
-            channelMessages = [];
-            messages[channelId] = channelMessages;
+            if (!messages.TryGetValue(channelId, out var channelMessages))
+            {
+                channelMessages = [];
+                messages[channelId] = channelMessages;
+            }
+
+            channelMessages.Add(reply);
+
+            var parent = FindMessage(parentMessageId);
+            parent?.ReplyCount = GetThreadReplies(parentMessageId).Count;
+
+            return reply;
         }
-
-        channelMessages.Add(reply);
-
-        var parent = FindMessage(parentMessageId);
-        parent?.ReplyCount = GetThreadReplies(parentMessageId).Count;
-
-        return reply;
     }
 
     public IReadOnlyList<ChatMessage> SearchMessages(string query)
@@ -518,56 +606,90 @@ public sealed class ChatService : IChatService
             return [];
         }
 
-        return messages.Values
-            .SelectMany(m => m)
-            .Where(m => !m.IsDeleted && m.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(m => m.Timestamp)
-            .Take(20)
-            .ToList();
+        lock (sync)
+        {
+            return messages.Values
+                .SelectMany(m => m)
+                .Where(m => !m.IsDeleted && m.Content.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(m => m.Timestamp)
+                .Take(20)
+                .ToList();
+        }
     }
 
     public void SetCustomStatus(string? emoji, string? text)
     {
-        currentUser = currentUser with { CustomStatusEmoji = emoji, CustomStatusText = text };
-        users[currentUser.Id] = currentUser;
+        lock (sync)
+        {
+            currentUser = currentUser with { CustomStatusEmoji = emoji, CustomStatusText = text };
+            users[currentUser.Id] = currentUser;
+        }
     }
 
     public void ToggleBookmark(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
-        if (!bookmarks.Add(messageId))
+
+        lock (sync)
         {
-            bookmarks.Remove(messageId);
+            if (!bookmarks.Add(messageId))
+            {
+                bookmarks.Remove(messageId);
+            }
         }
     }
 
-    public bool IsBookmarked(string messageId) => bookmarks.Contains(messageId);
+    public bool IsBookmarked(string messageId)
+    {
+        lock (sync)
+        {
+            return bookmarks.Contains(messageId);
+        }
+    }
 
-    public IReadOnlyList<ChatMessage> GetBookmarkedMessages() =>
-        messages.Values
-            .SelectMany(m => m)
-            .Where(m => bookmarks.Contains(m.Id) && !m.IsDeleted)
-            .OrderByDescending(m => m.Timestamp)
-            .ToList();
+    public IReadOnlyList<ChatMessage> GetBookmarkedMessages()
+    {
+        lock (sync)
+        {
+            return messages.Values
+                .SelectMany(m => m)
+                .Where(m => bookmarks.Contains(m.Id) && !m.IsDeleted)
+                .OrderByDescending(m => m.Timestamp)
+                .ToList();
+        }
+    }
 
     public void PinMessage(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
-        var msg = FindMessage(messageId);
-        msg?.IsPinned = true;
+
+        lock (sync)
+        {
+            var msg = FindMessage(messageId);
+            msg?.IsPinned = true;
+        }
     }
 
     public void UnpinMessage(string messageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
-        var msg = FindMessage(messageId);
-        msg?.IsPinned = false;
+
+        lock (sync)
+        {
+            var msg = FindMessage(messageId);
+            msg?.IsPinned = false;
+        }
     }
 
-    public IReadOnlyList<ChatMessage> GetPinnedMessages(string channelId) =>
-        messages.TryGetValue(channelId, out var list)
-            ? list.Where(m => m is { IsPinned: true, IsDeleted: false, ParentMessageId: null }).ToList()
-            : [];
+    public IReadOnlyList<ChatMessage> GetPinnedMessages(string channelId)
+    {
+        lock (sync)
+        {
+            return messages.TryGetValue(channelId, out var list)
+                ? list.Where(m => m is { IsPinned: true, IsDeleted: false, ParentMessageId: null }).ToList()
+                : [];
+        }
+    }
 
     private ChatMessage? FindMessage(string messageId)
     {

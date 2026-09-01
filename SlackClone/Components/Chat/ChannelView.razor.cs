@@ -131,7 +131,7 @@ public sealed partial class ChannelView : IDisposable
 
     private void HandleThreadReplyAsync(string content)
     {
-        if (ChannelId is null || activeThreadId is null)
+        if ((ChannelId is null) || (activeThreadId is null))
         {
             return;
         }
@@ -183,7 +183,7 @@ public sealed partial class ChannelView : IDisposable
 
     private Task DoSearchAsync()
     {
-        searchResults = string.IsNullOrWhiteSpace(searchQuery) ? [] : ChatService.SearchMessages(searchQuery);
+        searchResults = String.IsNullOrWhiteSpace(searchQuery) ? [] : ChatService.SearchMessages(searchQuery);
         return Task.CompletedTask;
     }
 

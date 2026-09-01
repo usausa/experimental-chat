@@ -338,7 +338,7 @@ public sealed class ChatService : IChatService
         lock (sync)
         {
             return messages.TryGetValue(channelId, out var channelMessages)
-                ? channelMessages.Where(m => m.ParentMessageId is null && !m.IsDeleted).ToList()
+                ? channelMessages.Where(m => (m.ParentMessageId is null) && !m.IsDeleted).ToList()
                 : [];
         }
     }
@@ -483,7 +483,7 @@ public sealed class ChatService : IChatService
             }
 
             var existing = message.Reactions.FirstOrDefault(r => r.Emoji == emoji);
-            if (existing is not null && existing.UserIds.Contains(currentUser.Id))
+            if ((existing is not null) && existing.UserIds.Contains(currentUser.Id))
             {
                 RemoveReaction(messageId, emoji);
             }
@@ -502,7 +502,7 @@ public sealed class ChatService : IChatService
         lock (sync)
         {
             var message = FindMessage(messageId);
-            if (message is null || message.AuthorId != currentUser.Id)
+            if ((message is null) || (message.AuthorId != currentUser.Id))
             {
                 return;
             }
@@ -519,7 +519,7 @@ public sealed class ChatService : IChatService
         lock (sync)
         {
             var message = FindMessage(messageId);
-            if (message is null || message.AuthorId != currentUser.Id)
+            if ((message is null) || (message.AuthorId != currentUser.Id))
             {
                 return;
             }
@@ -542,7 +542,7 @@ public sealed class ChatService : IChatService
                 return channelMessages.Count;
             }
 
-            return channelMessages.Count(m => m.Timestamp > channelLastRead && m.AuthorId != currentUser.Id && !m.IsDeleted);
+            return channelMessages.Count(m => (m.Timestamp > channelLastRead) && (m.AuthorId != currentUser.Id) && !m.IsDeleted);
         }
     }
 
@@ -560,7 +560,7 @@ public sealed class ChatService : IChatService
         {
             return messages.Values
                 .SelectMany(m => m)
-                .Where(m => m.ParentMessageId == parentMessageId && !m.IsDeleted)
+                .Where(m => (m.ParentMessageId == parentMessageId) && !m.IsDeleted)
                 .OrderBy(m => m.Timestamp)
                 .ToList();
         }
@@ -601,7 +601,7 @@ public sealed class ChatService : IChatService
 
     public IReadOnlyList<ChatMessage> SearchMessages(string query)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        if (String.IsNullOrWhiteSpace(query))
         {
             return [];
         }

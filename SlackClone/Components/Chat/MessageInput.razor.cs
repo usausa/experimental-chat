@@ -34,7 +34,7 @@ public partial class MessageInput
 
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(MessageText))
+        if (String.IsNullOrWhiteSpace(MessageText))
         {
             return;
         }

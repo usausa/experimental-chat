@@ -96,7 +96,7 @@ public partial class MessageItem
 
     private async Task SaveEditAsync()
     {
-        if (!string.IsNullOrWhiteSpace(editText))
+        if (!String.IsNullOrWhiteSpace(editText))
         {
             await OnEdit.InvokeAsync((Message.Id, editText));
         }

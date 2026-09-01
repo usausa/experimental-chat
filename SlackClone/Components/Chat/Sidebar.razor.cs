@@ -37,12 +37,12 @@ public partial class Sidebar
     private string statusText = string.Empty;
 
     private IEnumerable<Channel> FilteredChannels =>
-        string.IsNullOrWhiteSpace(filterText)
+        String.IsNullOrWhiteSpace(filterText)
             ? channels
             : channels.Where(c => c.Name.Contains(filterText, StringComparison.OrdinalIgnoreCase));
 
     private IEnumerable<Channel> FilteredDirectMessages =>
-        string.IsNullOrWhiteSpace(filterText)
+        String.IsNullOrWhiteSpace(filterText)
             ? directMessages
             : directMessages.Where(c => c.Name.Contains(filterText, StringComparison.OrdinalIgnoreCase));
 

@@ -1,5 +1,6 @@
 namespace SlackClone.Models;
 
+#pragma warning disable CA1002
 public sealed class ChatMessage
 {
     public required string Id { get; init; }
@@ -14,5 +15,8 @@ public sealed class ChatMessage
     public string? ParentMessageId { get; init; }
     public int ReplyCount { get; set; }
 }
+#pragma warning restore CA1002
 
+#pragma warning disable CA1002
 public record Reaction(string Emoji, List<string> UserIds);
+#pragma warning restore CA1002

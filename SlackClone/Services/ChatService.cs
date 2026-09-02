@@ -387,7 +387,7 @@ public sealed class ChatService : IChatService
     {
         lock (sync)
         {
-            return [.. users.Values];
+            return users.Values.ToArray();
         }
     }
 

@@ -1,3 +1,4 @@
+@using System.Globalization
 @using SlackClone.Helpers
 
 <div class="message-item @(IsFirstInGroup ? "first-in-group" : "continuation")">
@@ -98,7 +99,7 @@
     else
     {
         <div class="message-gutter">
-            <span class="hover-timestamp">@Message.Timestamp.ToString("HH:mm")</span>
+            <span class="hover-timestamp">@Message.Timestamp.ToString("HH:mm", CultureInfo.InvariantCulture)</span>
         </div>
         <div class="message-content">
             @if (isEditing)
